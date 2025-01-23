@@ -1,22 +1,15 @@
-;; Perpetual Exchange Contract - Initial Version
-;; Provides basic perpetual futures trading functionality with BTC collateral
+;; Perpetual Exchange Contract - Phase 2
+;; Adds liquidation mechanics and enhanced risk management
 
-;; Define our own trait for fungible tokens
+;; Define trait for fungible tokens
 (define-trait ft-trait
     (
-        ;; Transfer from the caller to a new principal
         (transfer (uint principal principal) (response bool uint))
-        ;; Get the token balance of owner
         (get-balance (principal) (response uint uint))
-        ;; Get the total number of tokens
         (get-total-supply () (response uint uint))
-        ;; Get the token decimals
         (get-decimals () (response uint uint))
-        ;; Get the token URI
         (get-token-uri () (response (optional (string-utf8 256)) uint))
-        ;; Get the token name
         (get-name () (response (string-ascii 32) uint))
-        ;; Get the token symbol
         (get-symbol () (response (string-ascii 32) uint))
     )
 )
@@ -26,13 +19,31 @@
 (define-constant ERR_UNAUTHORIZED (err u1001))
 (define-constant ERR_INVALID_PARAMS (err u1002))
 (define-constant ERR_INSUFFICIENT_BALANCE (err u1003))
+(define-constant ERR_POSITION_NOT_FOUND (err u1004))
+(define-constant ERR_ALREADY_LIQUIDATED (err u1005))
+(define-constant ERR_HEALTHY_POSITION (err u1006))
 (define-constant DEFAULT_MAINTENANCE_MARGIN u5)
+(define-constant LIQUIDATION_PENALTY u10)  ;; 10% penalty on liquidation
+(define-constant MINIMUM_COLLATERAL u100)  ;; Minimum collateral required
 
 ;; Helper Functions
 (define-private (get-absolute-int (value int))
     (if (< value 0)
         (* value -1)
         value))
+
+;; New helper for calculating position value
+(define-private (calculate-position-value (size int) (current-price uint))
+    (* (to-uint (get-absolute-int size)) current-price))
+
+;; New helper for calculating liquidation price
+(define-private (calculate-liquidation-price (position-size int) 
+                                           (collateral uint)
+                                           (maintenance-margin uint))
+    (let ((abs-size (to-uint (get-absolute-int position-size))))
+        (if (is-eq abs-size u0)
+            u0
+            (/ (* collateral maintenance-margin) abs-size))))
 
 ;; Data structures
 (define-map markets 
@@ -42,7 +53,8 @@
         last-price: uint,
         funding-rate: int,
         leverage-max: uint,
-        maintenance-margin: uint
+        maintenance-margin: uint,
+        liquidation-count: uint  ;; New field to track liquidations
     }
 )
 
@@ -53,83 +65,132 @@
         entry-price: uint,
         collateral: uint,
         leverage: uint,
-        last-funding-time: uint
+        last-funding-time: uint,
+        liquidation-price: uint,  ;; New field
+        is-liquidated: bool       ;; New field
     }
 )
 
-;; Initialize a new perpetual market
-(define-public (create-perp-market 
-    (asset-pair (string-ascii 10)) 
-    (initial-liquidity uint)
-    (max-leverage uint))
-    (begin
-        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_UNAUTHORIZED)
-        (asserts! (> initial-liquidity u0) ERR_INVALID_PARAMS)
-        (asserts! (> max-leverage u0) ERR_INVALID_PARAMS)
-        
-        (ok (map-set markets 
-            {asset-pair: asset-pair}
-            {
-                liquidity: initial-liquidity,
-                last-price: u0,
-                funding-rate: 0,
-                leverage-max: max-leverage,
-                maintenance-margin: DEFAULT_MAINTENANCE_MARGIN
-            }))
-    )
+;; New map for liquidation statistics
+(define-map liquidation-stats
+    principal
+    {
+        total-liquidations: uint,
+        total-penalty-paid: uint
+    }
 )
 
-;; Open a new position
+;; Enhanced check for position health
+(define-private (is-position-healthy (position {size: int, 
+                                              entry-price: uint, 
+                                              collateral: uint, 
+                                              leverage: uint,
+                                              last-funding-time: uint,
+                                              liquidation-price: uint,
+                                              is-liquidated: bool})
+                                    (current-price uint)
+                                    (maintenance-margin uint))
+    (let ((position-value (calculate-position-value (get size position) current-price)))
+        (>= (get collateral position) 
+            (/ (* position-value maintenance-margin) u100))))
+
+;; Liquidation function
+(define-public (liquidate-position (trader principal) 
+                                 (asset-pair (string-ascii 10)))
+    (let ((position (unwrap! (map-get? positions {trader: trader, asset-pair: asset-pair}) 
+                            ERR_POSITION_NOT_FOUND))
+          (market (unwrap! (map-get? markets {asset-pair: asset-pair}) 
+                          ERR_INVALID_PARAMS)))
+        
+        ;; Check if position can be liquidated
+        (asserts! (not (get is-liquidated position)) ERR_ALREADY_LIQUIDATED)
+        (asserts! (not (is-position-healthy position 
+                                          (get last-price market)
+                                          (get maintenance-margin market)))
+                 ERR_HEALTHY_POSITION)
+        
+        ;; Calculate liquidation penalty
+        (let ((penalty (/ (* (get collateral position) LIQUIDATION_PENALTY) u100))
+              (remaining-collateral (- (get collateral position) penalty)))
+            
+            ;; Update position as liquidated
+            (map-set positions
+                {trader: trader, asset-pair: asset-pair}
+                (merge position 
+                      {
+                          size: 0,
+                          collateral: u0,
+                          is-liquidated: true
+                      }))
+            
+            ;; Update market liquidation count
+            (map-set markets
+                {asset-pair: asset-pair}
+                (merge market 
+                      {
+                          liquidation-count: (+ (get liquidation-count market) u1)
+                      }))
+            
+            ;; Update liquidation statistics
+            (map-set liquidation-stats
+                trader
+                (merge (default-to 
+                        {total-liquidations: u0, total-penalty-paid: u0}
+                        (map-get? liquidation-stats trader))
+                      {
+                          total-liquidations: (+ u1 (get total-liquidations 
+                            (default-to {total-liquidations: u0, total-penalty-paid: u0} 
+                                      (map-get? liquidation-stats trader)))),
+                          total-penalty-paid: (+ penalty (get total-penalty-paid
+                            (default-to {total-liquidations: u0, total-penalty-paid: u0}
+                                      (map-get? liquidation-stats trader))))
+                      }))
+            
+            ;; Return success with liquidation details
+            (ok {
+                penalty: penalty,
+                remaining-collateral: remaining-collateral
+            })
+        )
+    ))
+
+;; Enhanced open position function with liquidation price calculation
 (define-public (open-position (asset-pair (string-ascii 10)) 
                             (size int)
                             (collateral uint)
                             (leverage uint))
     (let ((market (unwrap! (map-get? markets {asset-pair: asset-pair}) ERR_INVALID_PARAMS))
-          (current-position (default-to 
-                            {
-                                size: 0,
-                                entry-price: u0,
-                                collateral: u0,
-                                leverage: u0,
-                                last-funding-time: u0
-                            }
-                            (map-get? positions {trader: tx-sender, asset-pair: asset-pair})))
           (position-size-abs (get-absolute-int size)))
         
+        ;; Enhanced validation
         (asserts! (<= leverage (get leverage-max market)) ERR_INVALID_PARAMS)
+        (asserts! (>= collateral MINIMUM_COLLATERAL) ERR_INSUFFICIENT_BALANCE)
         (asserts! (>= collateral (/ (* (to-uint position-size-abs) (get last-price market)) leverage)) 
                  ERR_INSUFFICIENT_BALANCE)
         
-        (ok (map-set positions
-            {trader: tx-sender, asset-pair: asset-pair}
-            {
-                size: (+ size (get size current-position)),
-                entry-price: (get last-price market),
-                collateral: (+ collateral (get collateral current-position)),
-                leverage: leverage,
-                last-funding-time: block-height
-            }))
-    )
-)
-
-;; Get position details
-(define-read-only (get-position (trader principal) (asset-pair (string-ascii 10)))
-    (ok (map-get? positions {trader: trader, asset-pair: asset-pair}))
-)
-
-;; Get market details
-(define-read-only (get-market (asset-pair (string-ascii 10)))
-    (ok (map-get? markets {asset-pair: asset-pair}))
-)
-
-;; Update price feed (only authorized oracle)
-(define-public (update-price (asset-pair (string-ascii 10)) (new-price uint))
-    (begin
-        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_UNAUTHORIZED)
-        (let ((market (unwrap! (map-get? markets {asset-pair: asset-pair}) ERR_INVALID_PARAMS)))
-            (ok (map-set markets 
-                {asset-pair: asset-pair}
-                (merge market {last-price: new-price})))
+        ;; Calculate liquidation price
+        (let ((liquidation-price (calculate-liquidation-price 
+                                 size 
+                                 collateral 
+                                 (get maintenance-margin market))))
+            
+            (ok (map-set positions
+                {trader: tx-sender, asset-pair: asset-pair}
+                {
+                    size: size,
+                    entry-price: (get last-price market),
+                    collateral: collateral,
+                    leverage: leverage,
+                    last-funding-time: block-height,
+                    liquidation-price: liquidation-price,
+                    is-liquidated: false
+                }))
         )
-    )
+    ))
+
+;; Get liquidation statistics
+(define-read-only (get-liquidation-stats (trader principal))
+    (ok (default-to 
+        {total-liquidations: u0, total-penalty-paid: u0}
+        (map-get? liquidation-stats trader)))
 )
