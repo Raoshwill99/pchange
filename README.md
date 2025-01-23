@@ -1,6 +1,6 @@
 # Decentralized Perpetual Exchange
 
-A decentralized perpetual futures exchange built on the Stacks blockchain using Clarity smart contracts. This platform enables Bitcoin-collateralized perpetual contracts with advanced trading features, sophisticated liquidation mechanics, and comprehensive risk management.
+A sophisticated decentralized perpetual futures exchange built on the Stacks blockchain using Clarity smart contracts. This platform enables Bitcoin-collateralized perpetual contracts with advanced trading features, automated funding rate mechanisms, and comprehensive risk management.
 
 ## Features
 
@@ -18,12 +18,12 @@ A decentralized perpetual futures exchange built on the Stacks blockchain using 
 - Advanced risk management parameters
 - Comprehensive liquidation statistics
 
-### Market Features
-- Automated market making
-- Dynamic funding rate mechanism
-- Flexible position management
-- Real-time price feeds
-- Advanced collateral management system
+### Enhanced Trading Features (Phase 3)
+- Automated funding rate mechanism
+- Advanced order types (Market, Limit, Stop-Loss, Take-Profit)
+- Order book management system
+- Price impact controls
+- 24-hour volume tracking
 
 ## Smart Contract Architecture
 
@@ -34,7 +34,7 @@ A decentralized perpetual futures exchange built on the Stacks blockchain using 
    - Price feed updates
    - Liquidity pool management
    - Asset pair registration
-   - Liquidation tracking
+   - Funding rate calculations
 
 2. **Position Management**
    - Open/close positions
@@ -43,21 +43,57 @@ A decentralized perpetual futures exchange built on the Stacks blockchain using 
    - Leverage validation
    - Liquidation price calculation
 
-3. **Risk Management**
+3. **Order Management**
+   - Multiple order types support
+   - Order book maintenance
+   - Price level aggregation
+   - Order expiration handling
+   - Trigger price execution
+
+4. **Risk Management**
    - Dynamic maintenance margin requirements
    - Automated liquidation system
    - Position health monitoring
-   - Leverage restrictions
-   - Minimum collateral requirements
-
-4. **Liquidation System**
-   - Automated liquidation triggers
-   - Penalty calculation and distribution
-   - Liquidation statistics tracking
-   - Position settlement
-   - Collateral redistribution
+   - Price impact limits
+   - Order size restrictions
 
 ## Technical Specifications
+
+### Order Types
+
+1. **Market Orders**
+   - Immediate execution
+   - Best available price
+   - Volume-based execution
+
+2. **Limit Orders**
+   - Price-specific execution
+   - Order book placement
+   - Partial fill support
+
+3. **Stop-Loss Orders**
+   - Downside protection
+   - Trigger price activation
+   - Market price execution
+
+4. **Take-Profit Orders**
+   - Profit targeting
+   - Automatic execution
+   - Price threshold monitoring
+
+### Funding Rate Mechanism
+
+1. **Rate Calculation**
+   - Premium index tracking
+   - Price delta analysis
+   - Rate capping system
+   - Regular updates
+
+2. **Application**
+   - Automated collection
+   - Position-based distribution
+   - Balance management
+   - Rate history tracking
 
 ### Contract Functions
 
@@ -73,16 +109,17 @@ A decentralized perpetual futures exchange built on the Stacks blockchain using 
    - Access: Public
    - Includes liquidation price calculation
 
-3. `update-price`
-   - Updates asset price feeds
-   - Parameters: asset-pair, new-price
-   - Access: Authorized oracle only
+3. `create-order`
+   - Creates new trading orders
+   - Parameters: asset-pair, order-type, size, price, leverage
+   - Support for multiple order types
+   - Price impact validation
 
-4. `liquidate-position`
-   - Executes position liquidation
-   - Parameters: trader, asset-pair
-   - Access: Public
-   - Includes penalty calculation
+4. `update-funding`
+   - Updates funding rates
+   - Parameters: asset-pair
+   - Automated rate calculation
+   - Regular interval updates
 
 #### Read-Only Functions
 1. `get-position`
@@ -93,9 +130,13 @@ A decentralized perpetual futures exchange built on the Stacks blockchain using 
    - Retrieves market details
    - Parameters: asset-pair
 
-3. `get-liquidation-stats`
-   - Retrieves liquidation statistics
-   - Parameters: trader
+3. `get-order`
+   - Retrieves order details
+   - Parameters: order-id, trader
+
+4. `get-order-book-level`
+   - Retrieves order book depth
+   - Parameters: asset-pair, price-level
 
 ### Data Structures
 
@@ -107,45 +148,50 @@ A decentralized perpetual futures exchange built on the Stacks blockchain using 
     funding-rate: int,
     leverage-max: uint,
     maintenance-margin: uint,
-    liquidation-count: uint
+    liquidation-count: uint,
+    last-funding-time: uint,
+    premium-index: int,
+    target-price: uint,
+    volume-24h: uint
 }
 ```
 
-2. **Positions**
+2. **Orders**
 ```clarity
 {
+    asset-pair: (string-ascii 10),
+    order-type: uint,
     size: int,
-    entry-price: uint,
+    price: uint,
     collateral: uint,
     leverage: uint,
-    last-funding-time: uint,
-    liquidation-price: uint,
-    is-liquidated: bool
+    expiry: uint,
+    trigger-price: (optional uint),
+    is-active: bool
 }
 ```
 
-3. **Liquidation Statistics**
+3. **Order Book**
 ```clarity
 {
-    total-liquidations: uint,
-    total-penalty-paid: uint
+    total-size: int,
+    order-count: uint
 }
 ```
 
 ## Risk Parameters
 
-### Liquidation System
-- Maintenance Margin: 5%
-- Liquidation Penalty: 10%
-- Minimum Collateral: 100 units
-- Dynamic Liquidation Price Calculation
-- Automated Health Checks
-
-### Position Limits
+### Trading Limits
 - Maximum Leverage: 20x
-- Minimum Collateral Requirement
-- Position Size Restrictions
-- Dynamic Margin Requirements
+- Minimum Collateral: 100 units
+- Price Impact Limit: 0.2%
+- Order Expiry: 144 blocks (24 hours)
+
+### Funding Parameters
+- Update Interval: 6 blocks
+- Maximum Premium Rate: 0.1%
+- Premium Index Tracking
+- Dynamic Rate Adjustment
 
 ## Setup and Deployment
 
@@ -180,33 +226,35 @@ clarinet contract deploy
 
 ## Testing
 
-The contract includes comprehensive test coverage for all major functions:
-
+### Test Suites
 1. Market Operations Tests
    - Market creation
    - Price updates
-   - Liquidity management
+   - Funding rate calculations
 
-2. Position Management Tests
+2. Order Management Tests
+   - Order creation
+   - Order book updates
+   - Order execution
+   - Trigger price activation
+
+3. Position Management Tests
    - Position opening
    - Collateral management
    - Leverage validation
-
-3. Liquidation System Tests
-   - Liquidation triggers
-   - Penalty calculations
-   - Statistics tracking
+   - Funding payments
 
 4. Risk Management Tests
+   - Price impact checks
+   - Order size limits
    - Position health monitoring
-   - Margin calculations
-   - Leverage checks
+   - Liquidation triggers
 
-Run specific test suites:
+### Test Commands
 ```bash
 npm run test:markets
+npm run test:orders
 npm run test:positions
-npm run test:liquidations
 npm run test:risk
 ```
 
@@ -218,33 +266,36 @@ npm run test:risk
    - Position access restrictions
 
 2. **Risk Management**
-   - Dynamic liquidation system
+   - Price impact limits
+   - Order size restrictions
    - Position health monitoring
-   - Collateral validation
+   - Automated liquidations
 
-3. **Price Oracle**
-   - Authenticated price feeds
-   - Price manipulation protection
-   - Update frequency limits
+3. **Order Security**
+   - Expiration handling
+   - Price validation
+   - Size restrictions
+   - Trigger price accuracy
 
-4. **Liquidation Security**
-   - Atomic execution
-   - Penalty distribution
-   - Position settlement verification
+4. **Rate Management**
+   - Capped funding rates
+   - Regular updates
+   - Premium index validation
+   - Rate manipulation protection
 
 ## Future Improvements
 
-1. **Phase 3**
-   - Implement automated funding rate
-   - Add advanced order types
-   - Enhance liquidation mechanics
-   - Add partial liquidations
+1. **Phase 4**
+   - Advanced order matching
+   - Insurance fund integration
+   - Enhanced governance features
+   - Cross-margin trading
 
-2. **Phase 4**
-   - Add governance features
-   - Implement insurance fund
-   - Enhanced market making
+2. **Future Enhancements**
+   - Portfolio margin
+   - Advanced order types
    - Multi-collateral support
+   - Advanced market making
 
 ## Contributing
 
