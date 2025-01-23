@@ -1,8 +1,8 @@
 # Decentralized Perpetual Exchange
 
-A sophisticated decentralized perpetual futures exchange built on the Stacks blockchain using Clarity smart contracts. This platform enables Bitcoin-collateralized perpetual contracts with advanced trading features, automated funding rate mechanisms, and comprehensive risk management.
+A sophisticated decentralized perpetual futures exchange built on the Stacks blockchain using Clarity smart contracts. This platform enables Bitcoin-collateralized perpetual contracts with advanced market making, robust trading features, and comprehensive risk management.
 
-## Features
+## Features Evolution
 
 ### Core Functionality (Phase 1)
 - Bitcoin-collateralized perpetual contracts
@@ -25,289 +25,218 @@ A sophisticated decentralized perpetual futures exchange built on the Stacks blo
 - Price impact controls
 - 24-hour volume tracking
 
-## Smart Contract Architecture
+### Market Making System (Phase 4)
+- Professional market maker registration
+- Performance-based rewards
+- Automated metrics tracking
+- Quality-based incentives
+- Status management system
 
-### Key Components
+## Technical Architecture
 
-1. **Market Management**
-   - Market creation and configuration
-   - Price feed updates
-   - Liquidity pool management
-   - Asset pair registration
-   - Funding rate calculations
+### Market Maker System
 
-2. **Position Management**
-   - Open/close positions
-   - Position size tracking
-   - Collateral handling
-   - Leverage validation
-   - Liquidation price calculation
+1. **Registration Process**
+   ```clarity
+   (define-public (register-market-maker (stake-amount uint) (token <ft-trait>))
+   ```
+   - Minimum stake requirement
+   - Token staking mechanism
+   - Duplicate registration prevention
+   - Status tracking
 
-3. **Order Management**
-   - Multiple order types support
-   - Order book maintenance
-   - Price level aggregation
-   - Order expiration handling
-   - Trigger price execution
+2. **Performance Metrics**
+   ```clarity
+   {
+       total-volume: uint,
+       active-orders: uint,
+       quote-quality: uint,
+       last-update: uint,
+       stake-amount: uint,
+       rewards-accumulated: uint,
+       min-spread: uint,
+       performance-score: uint,
+       status: uint
+   }
+   ```
 
-4. **Risk Management**
-   - Dynamic maintenance margin requirements
-   - Automated liquidation system
-   - Position health monitoring
-   - Price impact limits
-   - Order size restrictions
+3. **Status Management**
+   - Active/Inactive states
+   - Performance-based status
+   - Owner-controlled updates
+   - Automated tracking
 
-## Technical Specifications
+### System Parameters
 
-### Order Types
+1. **Market Maker Requirements**
+   ```clarity
+   (define-constant MARKET_MAKER_MIN_STAKE u100000)
+   (define-constant MIN_ORDERS_REQUIRED u4)
+   (define-constant MAX_SPREAD_ALLOWED u500)
+   ```
 
-1. **Market Orders**
-   - Immediate execution
-   - Best available price
-   - Volume-based execution
+2. **Performance Scoring**
+   - Order count weighting (50%)
+   - Spread maintenance (30%)
+   - Volume contribution (20%)
 
-2. **Limit Orders**
-   - Price-specific execution
-   - Order book placement
-   - Partial fill support
+3. **Status Codes**
+   ```clarity
+   (define-constant MM_STATUS_ACTIVE u1)
+   (define-constant MM_STATUS_INACTIVE u0)
+   ```
 
-3. **Stop-Loss Orders**
-   - Downside protection
-   - Trigger price activation
-   - Market price execution
+## Contract Functions
 
-4. **Take-Profit Orders**
-   - Profit targeting
-   - Automatic execution
-   - Price threshold monitoring
+### Public Functions
 
-### Funding Rate Mechanism
+1. **Market Maker Registration**
+   ```clarity
+   (define-public (register-market-maker (stake-amount uint) (token <ft-trait>))
+   ```
+   - Parameters:
+     - stake-amount: Minimum required stake
+     - token: FT trait for staking
 
-1. **Rate Calculation**
-   - Premium index tracking
-   - Price delta analysis
-   - Rate capping system
-   - Regular updates
+2. **Metrics Update**
+   ```clarity
+   (define-public (update-market-maker-metrics 
+       (maker principal) 
+       (orders uint)
+       (spread uint)
+       (new-volume uint))
+   ```
+   - Updates performance metrics
+   - Calculates scores
+   - Tracks volume
 
-2. **Application**
-   - Automated collection
-   - Position-based distribution
-   - Balance management
-   - Rate history tracking
+3. **Status Management**
+   ```clarity
+   (define-public (update-market-maker-status (maker principal) (new-status uint))
+   ```
+   - Owner-only function
+   - Status validation
+   - State updates
 
-### Contract Functions
+### Read-Only Functions
 
-#### Public Functions
-1. `create-perp-market`
-   - Creates new perpetual markets
-   - Parameters: asset-pair, initial-liquidity, max-leverage
-   - Access: Contract owner only
+1. **Market Maker Info**
+   ```clarity
+   (define-read-only (get-market-maker (maker principal))
+   ```
+   - Retrieves complete maker data
 
-2. `open-position`
-   - Opens new trading positions
-   - Parameters: asset-pair, size, collateral, leverage
-   - Access: Public
-   - Includes liquidation price calculation
+2. **Status Checks**
+   ```clarity
+   (define-read-only (is-active-market-maker (maker principal))
+   ```
+   - Validates active status
 
-3. `create-order`
-   - Creates new trading orders
-   - Parameters: asset-pair, order-type, size, price, leverage
-   - Support for multiple order types
-   - Price impact validation
+## Error Handling
 
-4. `update-funding`
-   - Updates funding rates
-   - Parameters: asset-pair
-   - Automated rate calculation
-   - Regular interval updates
+1. **Registration Errors**
+   - ERR_ALREADY_REGISTERED
+   - ERR_INSUFFICIENT_STAKE
+   - ERR_UNAUTHORIZED
 
-#### Read-Only Functions
-1. `get-position`
-   - Retrieves position details
-   - Parameters: trader, asset-pair
+2. **Operation Errors**
+   - ERR_INVALID_PARAMS
+   - ERR_UNAUTHORIZED
+   - ERR_POSITION_NOT_FOUND
 
-2. `get-market`
-   - Retrieves market details
-   - Parameters: asset-pair
+## Security Features
 
-3. `get-order`
-   - Retrieves order details
-   - Parameters: order-id, trader
+1. **Access Control**
+   - Owner-only functions
+   - Maker self-management
+   - Status restrictions
 
-4. `get-order-book-level`
-   - Retrieves order book depth
-   - Parameters: asset-pair, price-level
+2. **Stake Management**
+   - Minimum stake requirement
+   - Token locking mechanism
+   - Withdrawal restrictions
 
-### Data Structures
-
-1. **Markets**
-```clarity
-{
-    liquidity: uint,
-    last-price: uint,
-    funding-rate: int,
-    leverage-max: uint,
-    maintenance-margin: uint,
-    liquidation-count: uint,
-    last-funding-time: uint,
-    premium-index: int,
-    target-price: uint,
-    volume-24h: uint
-}
-```
-
-2. **Orders**
-```clarity
-{
-    asset-pair: (string-ascii 10),
-    order-type: uint,
-    size: int,
-    price: uint,
-    collateral: uint,
-    leverage: uint,
-    expiry: uint,
-    trigger-price: (optional uint),
-    is-active: bool
-}
-```
-
-3. **Order Book**
-```clarity
-{
-    total-size: int,
-    order-count: uint
-}
-```
-
-## Risk Parameters
-
-### Trading Limits
-- Maximum Leverage: 20x
-- Minimum Collateral: 100 units
-- Price Impact Limit: 0.2%
-- Order Expiry: 144 blocks (24 hours)
-
-### Funding Parameters
-- Update Interval: 6 blocks
-- Maximum Premium Rate: 0.1%
-- Premium Index Tracking
-- Dynamic Rate Adjustment
+3. **Performance Monitoring**
+   - Continuous metric tracking
+   - Quality assessments
+   - Volume verification
 
 ## Setup and Deployment
 
 ### Prerequisites
 - Stacks blockchain development environment
 - Clarity CLI tools
-- Node.js and npm (for testing environment)
+- Node.js and npm
 
-### Installation
-1. Clone the repository:
-```bash
-git clone [repository-url]
-cd perpetual-exchange
-```
+### Installation Steps
+1. Clone repository:
+   ```bash
+   git clone [repository-url]
+   cd perpetual-exchange
+   ```
 
 2. Install dependencies:
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
-3. Run tests:
-```bash
-npm test
-```
-
-### Deployment
-1. Configure deployment parameters in `settings.json`
-2. Deploy contract:
-```bash
-clarinet contract deploy
-```
+3. Deploy contract:
+   ```bash
+   clarinet contract deploy
+   ```
 
 ## Testing
 
-### Test Suites
-1. Market Operations Tests
-   - Market creation
-   - Price updates
-   - Funding rate calculations
+### Test Categories
 
-2. Order Management Tests
-   - Order creation
-   - Order book updates
-   - Order execution
-   - Trigger price activation
+1. **Registration Tests**
+   - Stake validation
+   - Duplicate prevention
+   - Token transfers
 
-3. Position Management Tests
-   - Position opening
-   - Collateral management
-   - Leverage validation
-   - Funding payments
+2. **Metrics Tests**
+   - Performance calculation
+   - Volume tracking
+   - Score updates
 
-4. Risk Management Tests
-   - Price impact checks
-   - Order size limits
-   - Position health monitoring
-   - Liquidation triggers
+3. **Status Tests**
+   - State transitions
+   - Access controls
+   - Update validation
 
 ### Test Commands
 ```bash
-npm run test:markets
-npm run test:orders
-npm run test:positions
-npm run test:risk
+npm run test:registration
+npm run test:metrics
+npm run test:status
 ```
-
-## Security Considerations
-
-1. **Access Control**
-   - Owner-only functions
-   - Oracle authorization
-   - Position access restrictions
-
-2. **Risk Management**
-   - Price impact limits
-   - Order size restrictions
-   - Position health monitoring
-   - Automated liquidations
-
-3. **Order Security**
-   - Expiration handling
-   - Price validation
-   - Size restrictions
-   - Trigger price accuracy
-
-4. **Rate Management**
-   - Capped funding rates
-   - Regular updates
-   - Premium index validation
-   - Rate manipulation protection
 
 ## Future Improvements
 
-1. **Phase 4**
-   - Advanced order matching
-   - Insurance fund integration
-   - Enhanced governance features
-   - Cross-margin trading
+1. **Enhanced Features**
+   - Tiered market making
+   - Advanced reward systems
+   - Dynamic parameters
 
-2. **Future Enhancements**
-   - Portfolio margin
-   - Advanced order types
-   - Multi-collateral support
-   - Advanced market making
+2. **System Upgrades**
+   - Cross-margin trading
+   - Portfolio management
+   - Advanced analytics
 
 ## Contributing
 
-1. Fork the repository
+1. Fork repository
 2. Create feature branch
-3. Commit changes
-4. Submit pull request
+3. Submit pull request
+4. Add test coverage
 
 ## License
 
 MIT License - See LICENSE file for details
 
-## Contact
+## Support
 
-For questions and support, please open an issue in the GitHub repository.
+For questions and support:
+- Open GitHub issue
+- Join community channel
+- Check documentation
